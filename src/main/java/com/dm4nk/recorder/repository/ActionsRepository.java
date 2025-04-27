@@ -16,6 +16,7 @@ import com.dm4nk.recorder.constants.Constants;
 import com.dm4nk.recorder.model.ActionDTO;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Repository;
 
 import java.io.IOException;
@@ -34,12 +35,17 @@ public class ActionsRepository {
 
     private final ClickHouseNode server;
 
-    public void dropAndCreateActionsTable() throws ClickHouseException {
+    @Value("${app.drop.enabled}")
+    private boolean dropEnabled;
+
+    public void createActionsTable() throws ClickHouseException {
         try (ClickHouseClient client = ClickHouseClient.newInstance(server.getProtocol())) {
             ClickHouseRequest<?> request = client.read(server);
-            request.query(Constants.DROP_TABLE_SQL)
-                    .params(Map.of("tableName", Constants.DROP_TABLE_SQL))
-                    .execute().get();
+            if (dropEnabled) {
+                request.query(Constants.DROP_TABLE_SQL)
+                        .params(Map.of("tableName", Constants.ACTIONS_TABLE))
+                        .execute().get();
+            }
             request.query(Constants.CREATE_ACTIONS_TABLE)
                     .execute().get();
         } catch (InterruptedException e) {
@@ -96,7 +102,7 @@ public class ActionsRepository {
     public void deleteActionsForUser(String userId) throws ClickHouseException {
         try (ClickHouseClient client = ClickHouseClient.newInstance(server.getProtocol())) {
             ClickHouseRequest<?> request = client.read(server);
-            request.query(Constants.DELETE_BY_USER_NAME_SQL)
+            request.query(Constants.DELETE_BY_USER_ID_SQL)
                     .params(Map.of(
                             "tableName", Constants.ACTIONS_TABLE,
                             "userId", ClickHouseValues.convertToSqlExpression(userId)))

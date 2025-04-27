@@ -17,6 +17,7 @@ import com.dm4nk.recorder.constants.Constants;
 import com.dm4nk.recorder.model.ViewDTO;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Repository;
 
 import java.io.IOException;
@@ -36,12 +37,17 @@ public class ViewsRepository {
 
     private final ClickHouseNode server;
 
-    public void dropAndCreateViewsTable() throws ClickHouseException {
+    @Value("${app.drop.enabled}")
+    private boolean dropEnabled;
+
+    public void createViewsTable() throws ClickHouseException {
         try (ClickHouseClient client = ClickHouseClient.newInstance(server.getProtocol())) {
             ClickHouseRequest<?> request = client.read(server);
-            request.query(Constants.DROP_TABLE_SQL)
-                    .params(Map.of("tableName", VIEWS_TABLE))
-                    .execute().get();
+            if (dropEnabled) {
+                request.query(Constants.DROP_TABLE_SQL)
+                        .params(Map.of("tableName", VIEWS_TABLE))
+                        .execute().get();
+            }
             request.query(Constants.CREATE_VIEWS_TABLE)
                     .execute().get();
         } catch (InterruptedException e) {
@@ -52,16 +58,16 @@ public class ViewsRepository {
         }
     }
 
-    public void insertViewEvent(String userName, int pageVisitedId, int views) throws ClickHouseException {
-        Integer previousRecordViews = viewViewsForUserAndPageId(userName, pageVisitedId);
-        log.debug("insertViewEvent for user: {}, pageVisitedId: {} = {}", userName, pageVisitedId, previousRecordViews);
+    public void insertViewEvent(String userId, String pageVisitedId, int views) throws ClickHouseException {
+        Integer previousRecordViews = viewViewsForUserAndPageId(userId, pageVisitedId);
+        log.debug("insertViewEvent for user: {}, pageVisitedId: {} = {}", userId, pageVisitedId, previousRecordViews);
         if (Objects.nonNull(previousRecordViews)) {
-            insertViewEvent(userName, pageVisitedId, previousRecordViews, -1);
+            insertViewEvent(userId, pageVisitedId, previousRecordViews, -1);
         }
-        insertViewEvent(userName, pageVisitedId, views, 1);
+        insertViewEvent(userId, pageVisitedId, views, 1);
     }
 
-    private void insertViewEvent(String userName, int pageVisitedId, int views, int sign) throws ClickHouseException {
+    private void insertViewEvent(String userId, String pageVisitedId, int views, int sign) throws ClickHouseException {
         try (ClickHouseClient client = ClickHouseClient.newInstance(server.getProtocol())) {
             ClickHouseRequest.Mutation request = client.read(server).write().table(VIEWS_TABLE).format(ClickHouseFormat.RowBinary);
             ClickHouseConfig config = request.getConfig();
@@ -71,9 +77,9 @@ public class ViewsRepository {
                 // in async mode, which is default, execution happens in a worker thread
                 future = request.data(stream.getInputStream()).execute();
 
-                BinaryStreamUtils.writeString(stream, userName);
-                BinaryStreamUtils.writeInt8(stream, pageVisitedId);
-                BinaryStreamUtils.writeInt8(stream, views);
+                BinaryStreamUtils.writeString(stream, userId);
+                BinaryStreamUtils.writeString(stream, pageVisitedId);
+                BinaryStreamUtils.writeInt32(stream, views);
                 BinaryStreamUtils.writeInt8(stream, sign);
             }
 
@@ -90,7 +96,7 @@ public class ViewsRepository {
         }
     }
 
-    private Integer viewViewsForUserAndPageId(String userId, int pageVisitedId) throws ClickHouseException {
+    private Integer viewViewsForUserAndPageId(String userId, String pageVisitedId) throws ClickHouseException {
         try (ClickHouseClient client = ClickHouseClient.newInstance(server.getProtocol());
              ClickHouseResponse response = client.read(server)
                      .format(ClickHouseFormat.RowBinaryWithNamesAndTypes)
@@ -137,7 +143,7 @@ public class ViewsRepository {
     public void deleteViewsForUser(String userId) throws ClickHouseException {
         try (ClickHouseClient client = ClickHouseClient.newInstance(server.getProtocol())) {
             ClickHouseRequest<?> request = client.read(server);
-            request.query(Constants.DELETE_BY_USER_NAME_SQL)
+            request.query(Constants.DELETE_BY_USER_ID_SQL)
                     .params(Map.of(
                             "tableName", VIEWS_TABLE,
                             "userId", ClickHouseValues.convertToSqlExpression(userId)))

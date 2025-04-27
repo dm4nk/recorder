@@ -22,9 +22,18 @@ management:
     web:
       exposure:
         include: prometheus
-  zipkin:
-    tracing:
-      endpoint: http://localhost:9411/api/v2/spans
+  #  zipkin:
+  #    tracing:
+  #      endpoint: http://localhost:9411/api/v2/spans
   tracing:
     sampling:
       probability: 1.0
+
+eureka:
+  client:
+    enabled: false
+
+app:
+  swagger-redirect-url: "redirect:/swagger-ui/index.html"
+  drop:
+    enabled: true

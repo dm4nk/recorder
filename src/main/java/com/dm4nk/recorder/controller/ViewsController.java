@@ -1,48 +1,88 @@
 package com.dm4nk.recorder.controller;
 
 import com.clickhouse.client.ClickHouseException;
-import lombok.AllArgsConstructor;
+import com.dm4nk.recorder.model.ViewRequest;
+import com.dm4nk.recorder.model.ViewResponse;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.Parameter;
+import io.swagger.v3.oas.annotations.media.Content;
+import io.swagger.v3.oas.annotations.media.ExampleObject;
+import io.swagger.v3.oas.annotations.media.Schema;
+import io.swagger.v3.oas.annotations.responses.ApiResponse;
+import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
-import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
-import org.springframework.web.bind.annotation.RestController;
 
 import java.util.List;
 
-
-@RestController
-@RequestMapping("api/v1/views")
-@AllArgsConstructor
-public class ViewsController {
-    private final ViewsRepository viewsRepository;
-
+public interface ViewsController {
+    @Operation(summary = "Добавить просмотр", description = "Добавляет новый просмотр для пользователя")
+    @ApiResponses(value = {
+            @ApiResponse(responseCode = "200", description = "Просмотр успешно добавлен"),
+            @ApiResponse(responseCode = "400", description = "Некорректный запрос", content = @Content),
+            @ApiResponse(responseCode = "500", description = "Ошибка сервера", content = @Content)
+    })
     @PostMapping
-    public void addView(@RequestBody ViewRequest viewRequest) throws ClickHouseException {
-        viewsRepository.insertViewEvent(viewRequest.getUserName(), viewRequest.getPageVisitedId(), viewRequest.getViews());
-    }
+    ResponseEntity<Void> addView(
+            @RequestBody @Parameter(description = "Запрос на добавление просмотра",
+                    required = true,
+                    content = @Content(
+                            schema = @Schema(implementation = ViewRequest.class),
+                            examples = @ExampleObject(value = """
+                                    {
+                                      "userId": "12345",
+                                      "pageVisitedId": 678,
+                                      "views": 3
+                                    }
+                                    """)
+                    )
+            ) ViewRequest viewRequest) throws ClickHouseException;
 
-    @PatchMapping
-    public void updateView(@RequestParam String userName, @RequestParam Integer views) throws ClickHouseException {
-        viewsRepository.updateViewsForUserName(userName, views);
-    }
-
+    @Operation(summary = "Удалить просмотры пользователя", description = "Удаляет все просмотры по userId")
+    @ApiResponses(value = {
+            @ApiResponse(responseCode = "200", description = "Просмотры успешно удалены"),
+            @ApiResponse(responseCode = "400", description = "Некорректный запрос", content = @Content),
+            @ApiResponse(responseCode = "500", description = "Ошибка сервера", content = @Content)
+    })
     @DeleteMapping
-    public void removeView(@RequestParam String userName) throws ClickHouseException {
-        viewsRepository.deleteViewsForUser(userName);
-    }
+    ResponseEntity<Void> removeView(
+            @RequestParam @Parameter(description = "ID пользователя")
+            String userId
+    ) throws ClickHouseException;
 
+    @Operation(summary = "Посмотреть просмотры пользователя", description = "Возвращает список просмотров по userId")
+    @ApiResponses(value = {
+            @ApiResponse(responseCode = "200", description = "Просмотры успешно получены",
+                    content = @Content(
+                            mediaType = "application/json",
+                            schema = @Schema(implementation = ViewResponse.class),
+                            examples = @ExampleObject(value = """
+                                    [
+                                      {
+                                        "pageVisitedId": 678,
+                                        "views": 3,
+                                        "eventTime": "2024-04-27T14:30:00"
+                                      }
+                                    ]
+                                    """)
+                    )),
+            @ApiResponse(responseCode = "400", description = "Некорректный запрос", content = @Content),
+            @ApiResponse(responseCode = "500", description = "Ошибка сервера", content = @Content)
+    })
     @GetMapping
-    public ResponseEntity<List<ViewResponse>> viewViews(@RequestParam String userName) throws ClickHouseException {
-        return ResponseEntity.ok(viewsRepository.viewViewsForUser(userName));
-    }
+    ResponseEntity<List<ViewResponse>> viewViews(
+            @RequestParam @Parameter(description = "ID пользователя")
+            String userId) throws ClickHouseException;
 
+    @Operation(summary = "Оптимизировать таблицу просмотров", description = "Выполняет операцию оптимизации хранения просмотров")
+    @ApiResponses(value = {
+            @ApiResponse(responseCode = "200", description = "Оптимизация успешно выполнена"),
+            @ApiResponse(responseCode = "500", description = "Ошибка сервера", content = @Content)
+    })
     @PostMapping("/optimize")
-    public void optimize() throws ClickHouseException {
-        viewsRepository.optimizeTable(VIEWS_TABLE);
-    }
+    ResponseEntity<Void> optimize() throws ClickHouseException;
 }
